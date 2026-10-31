@@ -279,18 +279,37 @@ def recover_install(
                     )
                 previous.replace(root)
             elif not ready.exists() and tree_hashes(root, cancelled) == state["files"]:
-                # 原安装中的外部修改可能仅留在 previous，不能直接删掉。
+                # 新安装已确认后清理 previous 可中断重试，但必须复核剩余文件。
                 original_files = state.get("original_files")
-                if (
-                    not isinstance(original_files, dict)
-                    or tree_hashes(previous, cancelled) != original_files
-                ):
-                    raise InstallUnsafeError(
-                        "原安装备份发生外部修改，已保留现场，不能自动删除备份"
+                if not isinstance(original_files, dict):
+                    raise InstallUnsafeError("原安装文件清单无效，不能自动清理备份")
+                remaining = tree_hashes(previous, cancelled)
+                if state.get("phase") == "installed":
+                    receipt = directory / "installed.json"
+                    _reject_link(receipt)
+                    recorded = json.loads(receipt.read_text(encoding="utf-8"))
+                    if not isinstance(recorded, dict) or recorded.get(
+                        "files"
+                    ) != state.get("package_files"):
+                        raise InstallUnsafeError(
+                            "更新确认记录与安装包不一致，已保留备份"
+                        )
+                    if any(
+                        original_files.get(name) != digest
+                        for name, digest in remaining.items()
+                    ):
+                        raise InstallUnsafeError(
+                            "清理期间原安装备份发生外部修改，已保留现场"
+                        )
+                else:
+                    if remaining != original_files:
+                        raise InstallUnsafeError(
+                            "原安装备份发生外部修改，已保留现场，不能自动删除备份"
+                        )
+                    _write_state(
+                        directory, {"files": state["package_files"]}, "installed.json"
                     )
-                _write_state(
-                    directory, {"files": state["package_files"]}, "installed.json"
-                )
+                    _write_state(directory, {**state, "phase": "installed"})
                 shutil.rmtree(previous)
             else:
                 raise InstallUnsafeError(
@@ -378,15 +397,13 @@ def install_package(
         raise InstallUnsafeError("准备更新期间安装内容被外部修改，已停止切换")
     _check_cancel(cancelled)
     assert_idle()
-    _write_state(
-        directory,
-        {
-            "root": str(root.resolve()),
-            "files": expected,
-            "original_files": before,
-            "package_files": package_files,
-        },
-    )
+    transaction_state = {
+        "root": str(root.resolve()),
+        "files": expected,
+        "original_files": before,
+        "package_files": package_files,
+    }
+    _write_state(directory, transaction_state)
     try:
         root.replace(previous)
         try:
@@ -409,6 +426,8 @@ def install_package(
                 "切换期间原安装备份被外部修改，已保留备份，请手动处理"
             )
         _write_state(directory, {"files": package_files}, "installed.json")
+        # 从此阶段起，新安装与收据均已验证；旧备份清理可安全续做。
+        _write_state(directory, {**transaction_state, "phase": "installed"})
         shutil.rmtree(previous)
         (directory / "transaction.json").unlink()
     except BaseException as error:
