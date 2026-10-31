@@ -56,20 +56,22 @@ class ProcessResult:
 
 # 在导入时求值一次: locale.getpreferredencoding() 每次调用都会做一轮
 # 进程级 setlocale 往返, 而本函数位于日志逐行解码与 ADB 轮询热路径。
-# 常见脚本的中文编码优先于系统代码页，避免 cp1252 把 GBK 无损解成乱码。
+# 系统编码仍用于通用配置文件；已知脚本的中文输出应由调用方指定编码顺序。
 ENCODINGS = tuple(
     e
     for e in dict.fromkeys(
-        ["utf-8", "utf-8-sig", "gbk", "gb18030", locale.getpreferredencoding()]
+        ["utf-8", "utf-8-sig", locale.getpreferredencoding(), "gbk", "gb18030"]
     )
     if e
 )
 
 
-def decode_bytes(data: bytes | None) -> str:
+def decode_bytes(
+    data: bytes | None, *, encodings: tuple[str, ...] | None = None
+) -> str:
     if not data:
         return ""
-    for encoding in ENCODINGS:
+    for encoding in ENCODINGS if encodings is None else encodings:
         try:
             return data.decode(encoding, errors="strict")
         except (UnicodeDecodeError, LookupError):
