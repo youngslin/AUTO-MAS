@@ -534,3 +534,67 @@ def test_other_url_paused_allows_new_writer_without_resuming_old(tmp_path, monke
         exe, new_url, target, other_only=True
     )
     assert calls == [["status", "old-task", "--json"]]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("downloader", ["fluxdown", "builtin"])
+async def test_cancelled_write_owner_probe_holds_target_lock_until_thread_exits(
+    tmp_path, monkeypatch, downloader
+):
+    import asyncio
+    import threading
+
+    monkeypatch.setattr(cli, "_server_data_dir", lambda _path: tmp_path)
+    executable = tmp_path / "fluxdown.exe"
+    destination = tmp_path / "release.zip"
+    monkeypatch.setattr(cli, "fluxdown_find_cli", lambda _path: executable)
+    started = threading.Event()
+    release = threading.Event()
+    finished = threading.Event()
+
+    def slow_probe(*_args, **_kwargs):
+        started.set()
+        try:
+            assert release.wait(5), "probe thread was never released"
+            return True
+        finally:
+            finished.set()
+
+    monkeypatch.setattr(cli, "fluxdown_server_task_safe_to_overwrite", slow_probe)
+    options = transport.FluxdownOptions(
+        downloader, "GitHub", str(executable), 8, True
+    )
+    first = asyncio.create_task(
+        transport.download_file(
+            "https://example.invalid/second",
+            destination,
+            timeout=30,
+            options=options,
+            downloader=downloader,
+            source="GitHub",
+            http_download=AsyncMock(return_value=1),
+        )
+    )
+    assert await asyncio.to_thread(started.wait, 3)
+    acquired = asyncio.Event()
+
+    async def next_owner():
+        async with cli.fluxdown_destination_lock(executable, destination):
+            acquired.set()
+
+    follower = None
+    try:
+        first.cancel()
+        await asyncio.sleep(0.05)
+        assert not first.done(), "cancellation released a still-running probe"
+        follower = asyncio.create_task(next_owner())
+        await asyncio.sleep(0.05)
+        assert not acquired.is_set(), "next owner entered while old probe is active"
+    finally:
+        release.set()
+    with pytest.raises(asyncio.CancelledError):
+        await asyncio.wait_for(first, timeout=5)
+    assert finished.is_set()
+    assert follower is not None
+    await asyncio.wait_for(follower, timeout=5)
+    assert acquired.is_set()
