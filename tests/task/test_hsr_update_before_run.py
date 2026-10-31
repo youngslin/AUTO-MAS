@@ -230,3 +230,56 @@ async def test_reused_pipeline_installs_package_and_preserves_user_files(
     assert (root / exe).read_bytes() == b"new engine"
     assert config.read_bytes() == b"user settings"
     assert not installer.has_pending_journal(root)
+
+
+@pytest.mark.parametrize(
+    "unsafe_path", ["../outside.txt", "/tmp/outside.txt", "C:/outside.txt", "sub/../outside.txt", "sub\\outside.txt"]
+)
+def test_unsafe_rollback_journal_never_changes_other_files(tmp_path, unsafe_path):
+    import json
+
+    root = tmp_path / "script"
+    root.mkdir()
+    outside = tmp_path / "outside.txt"
+    outside.write_bytes(b"keep")
+    journal = installer.journal_path(root)
+    journal.parent.mkdir(parents=True)
+    journal.write_text(
+        json.dumps(
+            {
+                "schema": 1,
+                "engine": "SRA",
+                "entries": [{"rel": unsafe_path, "action": "create"}],
+            }
+        ),
+        encoding="utf-8",
+    )
+    assert installer.rollback(root) is False
+    assert journal.exists()
+    assert outside.read_bytes() == b"keep"
+
+
+def test_rollback_journal_validates_all_entries_before_mutating(tmp_path):
+    import json
+
+    root = tmp_path / "script"
+    root.mkdir()
+    first = root / "created.txt"
+    first.write_text("must be preserved")
+    journal = installer.journal_path(root)
+    journal.parent.mkdir(parents=True)
+    journal.write_text(
+        json.dumps(
+            {
+                "schema": 1,
+                "engine": "SRA",
+                "entries": [
+                    {"rel": "created.txt", "action": "create"},
+                    {"rel": "../outside.txt", "action": "create"},
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+    assert installer.rollback(root) is False
+    assert first.read_text() == "must be preserved"

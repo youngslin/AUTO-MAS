@@ -11,6 +11,8 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
+import re
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -20,6 +22,7 @@ from typing import TypeVar
 
 import httpx
 
+from app.core.script_update import script_downloader
 from app.utils import get_logger
 
 from ...task_mapping import engine_label
@@ -29,7 +32,7 @@ from .apply import (
     has_pending_journal,
     rollback,
 )
-from .discover import DiscoveryResult, HSRUpdateError, discover
+from .discover import DiscoveryResult, HSRUpdateError, UpdateCandidate, discover
 from .download import AbortFn, HSRUpdateAborted
 from .engines import (
     EngineSpec,
@@ -110,6 +113,31 @@ async def check_engine_update(
     )
 
 
+
+def _cache_package_path(
+    download_dir: Path,
+    spec: EngineSpec,
+    candidate: UpdateCandidate,
+    proxy: httpx.Proxy | None,
+) -> Path:
+    """按来源 URL 与下载方式隔离半包，防止跨源/跨下载器复用或双写。"""
+    version = re.sub(r"[^A-Za-z0-9._-]", "_", candidate.latest_version)[:48]
+    if not version:
+        version = "unknown"
+    downloader = script_downloader(candidate.source)
+    if proxy is not None and proxy.auth is not None:
+        downloader = "builtin"
+    identity = "\0".join(
+        (candidate.source, candidate.download_url, downloader, candidate.asset_kind)
+    )
+    stamp = hashlib.sha256(identity.encode("utf-8")).hexdigest()[:20]
+    name = (
+        f"{spec.mirrorchyan_rid}-{version}-{downloader}-{stamp}"
+        f"{_suffix(candidate)}"
+    )
+    return download_dir / name
+
+
 async def update_engine_if_needed(
     engine: str,
     install_root: Path,
@@ -186,10 +214,7 @@ async def update_engine_if_needed(
 
     log(f"{label}发现新版本 {candidate.latest_version}，开始下载")
 
-    package = (
-        download_dir
-        / f"{spec.mirrorchyan_rid}-{candidate.latest_version}{_suffix(candidate)}"
-    )
+    package = _cache_package_path(download_dir, spec, candidate, proxy)
     try:
         package = await _download_with_space_check(
             candidate,

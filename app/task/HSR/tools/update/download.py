@@ -11,6 +11,7 @@ from pathlib import Path
 import httpx
 
 from app.core.script_update import download_script_package
+from app.services.update_fluxdown import FluxdownResumableError
 from app.services.update_transport import DownloadProgress
 from app.utils import get_logger
 from app.utils.common.fluxdown_cli import FluxdownCancelUnconfirmed
@@ -41,7 +42,7 @@ async def download_package(
     progress: ProgressFn | None = None,
     should_abort: AbortFn | None = None,
 ) -> Path:
-    """下载到 ``destination``，返回该路径。失败时不留下半个文件。
+    """下载到 ``destination``，成功校验后发布；可续传失败保留半包。
 
     ``should_abort`` 在每次重试和下载进度回调中检查；取消后由公共下载器
     确认后台写入停止，半包保留供续传，只有校验成功的包才发布给安装器。
@@ -70,6 +71,15 @@ async def download_package(
         except HSRUpdateAborted:
             # 半截文件留着：下次 Range 续传能接上，用户不必从头下。
             raise
+        except FluxdownResumableError as exc:
+            # FluxDown task 仍可 resume，后台写入权也可能尚未收敛。
+            # 可重试相同 URL/目标，但耗尽后必须原样传播，不得删半包。
+            logger.warning(
+                f"HSR 更新：FluxDown 第 {attempt}/{_RETRIES} 次续传中断：{exc}"
+            )
+            if attempt == _RETRIES:
+                raise
+            await asyncio.sleep(_RETRY_DELAY * attempt)
         except Exception as exc:  # noqa: BLE001 - 网络异常形态多，统一重试
             last_error = exc
             logger.warning(
