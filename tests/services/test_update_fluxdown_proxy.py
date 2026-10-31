@@ -505,9 +505,7 @@ def test_other_url_same_target_requires_stopped_writer(tmp_path, monkeypatch):
     )
 
 
-def test_other_url_paused_allows_new_writer_without_resuming_old(
-    tmp_path, monkeypatch
-):
+def test_other_url_paused_allows_new_writer_without_resuming_old(tmp_path, monkeypatch):
     exe = tmp_path / "fluxdown.exe"
     target = tmp_path / "package.zip"
     old_url, new_url = "https://example.invalid/old", "https://example.invalid/new"

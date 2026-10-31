@@ -341,7 +341,9 @@ class M7ARunner:
         return "\n".join(
             line.strip()
             for raw_line in bytes(output).split(b"\n")
-            for line in unescape_backslash_u(decode_bytes(raw_line, encodings=_M7A_OUTPUT_ENCODINGS)).splitlines()
+            for line in unescape_backslash_u(
+                decode_bytes(raw_line, encodings=_M7A_OUTPUT_ENCODINGS)
+            ).splitlines()
             if line.strip()
         )
 
@@ -468,8 +470,12 @@ class M7ARunner:
                 )
             except asyncio.TimeoutError as exc:
                 raise _M7ACommandTimeout from exc
-            stdout = unescape_backslash_u(decode_bytes(stdout_bytes, encodings=_M7A_OUTPUT_ENCODINGS)).strip()
-            stderr = unescape_backslash_u(decode_bytes(stderr_bytes, encodings=_M7A_OUTPUT_ENCODINGS)).strip()
+            stdout = unescape_backslash_u(
+                decode_bytes(stdout_bytes, encodings=_M7A_OUTPUT_ENCODINGS)
+            ).strip()
+            stderr = unescape_backslash_u(
+                decode_bytes(stderr_bytes, encodings=_M7A_OUTPUT_ENCODINGS)
+            ).strip()
             self._emit_process_output("三月七", stdout)
             self._emit_process_output("三月七 stderr", stderr)
             for text in (stdout, stderr):

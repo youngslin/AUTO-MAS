@@ -66,5 +66,3 @@ def refresh_merged_pipelines(
             raise InstallUnsafeError("旧 pipeline 备份校验失败，已停止安装")
         _check_cancel(cancelled)
         shutil.rmtree(existing)
-
-
