@@ -398,3 +398,47 @@ def test_missing_install_root_rejects_damaged_previous_backup(package, monkeypat
         install.recover_install(root, lambda: None, threading.Event())
     assert (previous / "app.exe").read_bytes() == b"externally changed"
     assert (install.workspace(root) / "transaction.json").exists()
+
+
+def test_interrupted_backup_cleanup_can_safely_finish_on_next_run(package, monkeypatch):
+    root, _ = package
+    old_rmtree = install.shutil.rmtree
+    previous = install.workspace(root) / "previous"
+
+    def fail_cleanup(path, *args, **kwargs):
+        if Path(path) == previous:
+            (previous / "app.exe").unlink()
+            raise OSError("simulated interrupted backup cleanup")
+        return old_rmtree(path, *args, **kwargs)
+
+    monkeypatch.setattr(install.shutil, "rmtree", fail_cleanup)
+    with pytest.raises(install.InstallUnsafeError):
+        apply(package)
+    monkeypatch.setattr(install.shutil, "rmtree", old_rmtree)
+    assert (root / "app.exe").read_bytes() == b"new"
+    assert previous.exists()
+    install.recover_install(root, lambda: None, threading.Event())
+    assert (root / "app.exe").read_bytes() == b"new"
+    assert not previous.exists()
+    assert not (install.workspace(root) / "transaction.json").exists()
+
+
+def test_interrupted_backup_cleanup_keeps_external_modifications(package, monkeypatch):
+    root, _ = package
+    old_rmtree = install.shutil.rmtree
+    previous = install.workspace(root) / "previous"
+
+    def fail_cleanup(path, *args, **kwargs):
+        if Path(path) == previous:
+            (previous / "app.exe").unlink()
+            raise OSError("simulated interrupted cleanup")
+        return old_rmtree(path, *args, **kwargs)
+
+    monkeypatch.setattr(install.shutil, "rmtree", fail_cleanup)
+    with pytest.raises(install.InstallUnsafeError):
+        apply(package)
+    monkeypatch.setattr(install.shutil, "rmtree", old_rmtree)
+    (previous / "config/user.json").write_bytes(b"external modification")
+    with pytest.raises(install.InstallUnsafeError, match="备份发生外部修改"):
+        install.recover_install(root, lambda: None, threading.Event())
+    assert (previous / "config/user.json").read_bytes() == b"external modification"
