@@ -288,11 +288,16 @@ def recover_install(
                     receipt = directory / "installed.json"
                     _reject_link(receipt)
                     recorded = json.loads(receipt.read_text(encoding="utf-8"))
-                    if not isinstance(recorded, dict) or recorded.get("files") != state.get(
-                        "package_files"
+                    if not isinstance(recorded, dict) or recorded.get(
+                        "files"
+                    ) != state.get("package_files"):
+                        raise InstallUnsafeError(
+                            "更新确认记录与安装包不一致，已保留备份"
+                        )
+                    if any(
+                        original_files.get(name) != digest
+                        for name, digest in remaining.items()
                     ):
-                        raise InstallUnsafeError("更新确认记录与安装包不一致，已保留备份")
-                    if any(original_files.get(name) != digest for name, digest in remaining.items()):
                         raise InstallUnsafeError(
                             "清理期间原安装备份发生外部修改，已保留现场"
                         )

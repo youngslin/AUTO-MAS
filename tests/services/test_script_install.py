@@ -400,9 +400,7 @@ def test_missing_install_root_rejects_damaged_previous_backup(package, monkeypat
     assert (install.workspace(root) / "transaction.json").exists()
 
 
-def test_interrupted_backup_cleanup_can_safely_finish_on_next_run(
-    package, monkeypatch
-):
+def test_interrupted_backup_cleanup_can_safely_finish_on_next_run(package, monkeypatch):
     root, _ = package
     old_rmtree = install.shutil.rmtree
     previous = install.workspace(root) / "previous"
