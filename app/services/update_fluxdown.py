@@ -249,6 +249,24 @@ async def _download_via_fluxdown(
     proxy_str = _proxy_to_str(proxy)
     server_on = options.server_mode
 
+    # 无论选择 FluxDown 还是 httpx，同一路径的其他 URL 任务都不得继续写盘。
+    if not await asyncio.to_thread(
+        _utils_fluxdown_cli.fluxdown_server_task_safe_to_overwrite,
+        cli_path,
+        url,
+        destination,
+        other_only=True,
+    ):
+        await _block_downgrade(
+            cli_path,
+            url,
+            destination,
+            segments=segments,
+            proxy_str=proxy_str,
+            detail="同一文件其他下载来源的 FluxDown 任务尚未确认停止",
+            write_history=write_history,
+        )
+
     if server_on and _utils_fluxdown_cli.fluxdown_server_available(
         cli_path, enabled=True
     ):

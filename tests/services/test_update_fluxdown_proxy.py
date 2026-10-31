@@ -479,3 +479,58 @@ async def test_server_download_prevents_installation_until_cancelled(
         tmp_path / "fluxdown.exe", tmp_path / "update.zip"
     ):
         pass
+
+
+def test_other_url_same_target_requires_stopped_writer(tmp_path, monkeypatch):
+    exe = tmp_path / "fluxdown.exe"
+    target = tmp_path / "package.zip"
+    old_url = "https://example.invalid/old"
+    new_url = "https://example.invalid/new"
+    mapping = {
+        cli._map_key(old_url, target): {
+            "task_id": "old-task",
+            "save_path": str(target),
+        }
+    }
+    monkeypatch.setattr(cli, "_load_task_map", lambda _exe: mapping)
+    monkeypatch.setattr(
+        cli,
+        "fluxdown_server_ensure",
+        lambda _exe: SimpleNamespace(gateway_port=12345, token="token"),
+    )
+    monkeypatch.setattr(cli, "_run_cli", lambda *_args, **_kwargs: (124, "timeout"))
+    assert not cli.fluxdown_server_task_safe_to_overwrite(exe, new_url, target)
+    assert not cli.fluxdown_server_task_safe_to_overwrite(
+        exe, new_url, target, other_only=True
+    )
+
+
+def test_other_url_paused_allows_new_writer_without_resuming_old(tmp_path, monkeypatch):
+    exe = tmp_path / "fluxdown.exe"
+    target = tmp_path / "package.zip"
+    old_url, new_url = "https://example.invalid/old", "https://example.invalid/new"
+    mapping = {
+        cli._map_key(old_url, target): {
+            "task_id": "old-task",
+            "save_path": str(target),
+        }
+    }
+    calls = []
+
+    def cli_command(_exe, _env, args, timeout=30):
+        calls.append(args)
+        if args[0] == "status":
+            return 0, json.dumps({"status": 2})
+        raise AssertionError("paused task must not be resumed")
+
+    monkeypatch.setattr(cli, "_load_task_map", lambda _exe: mapping)
+    monkeypatch.setattr(
+        cli,
+        "fluxdown_server_ensure",
+        lambda _exe: SimpleNamespace(gateway_port=12345, token="token"),
+    )
+    monkeypatch.setattr(cli, "_run_cli", cli_command)
+    assert cli.fluxdown_server_task_safe_to_overwrite(
+        exe, new_url, target, other_only=True
+    )
+    assert calls == [["status", "old-task", "--json"]]
