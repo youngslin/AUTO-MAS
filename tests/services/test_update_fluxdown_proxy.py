@@ -561,9 +561,7 @@ async def test_cancelled_write_owner_probe_holds_target_lock_until_thread_exits(
             finished.set()
 
     monkeypatch.setattr(cli, "fluxdown_server_task_safe_to_overwrite", slow_probe)
-    options = transport.FluxdownOptions(
-        downloader, "GitHub", str(executable), 8, True
-    )
+    options = transport.FluxdownOptions(downloader, "GitHub", str(executable), 8, True)
     first = asyncio.create_task(
         transport.download_file(
             "https://example.invalid/second",
