@@ -32,6 +32,7 @@ from __future__ import annotations
 import asyncio
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
+from functools import partial
 from pathlib import Path
 
 import httpx
@@ -250,12 +251,15 @@ async def _download_via_fluxdown(
     server_on = options.server_mode
 
     # 无论选择 FluxDown 还是 httpx，同一路径的其他 URL 任务都不得继续写盘。
-    if not await asyncio.to_thread(
-        _utils_fluxdown_cli.fluxdown_server_task_safe_to_overwrite,
-        cli_path,
-        url,
-        destination,
-        other_only=True,
+    if not await _utils_fluxdown_cli._to_thread_strong(
+        partial(
+            _utils_fluxdown_cli.fluxdown_server_task_safe_to_overwrite,
+            cli_path,
+            url,
+            destination,
+            other_only=True,
+        ),
+        propagate_cancel=True,
     ):
         await _block_downgrade(
             cli_path,
@@ -383,11 +387,12 @@ async def _can_downgrade(cli_path: Path, url: str, destination: Path) -> bool:
     统一 ``--local`` 与内置 httpx 两条降级路径的门槛，避免旧 daemon 仍在写
     同一目标时启动第二个写入者。
     """
-    return await asyncio.to_thread(
+    return await _utils_fluxdown_cli._to_thread_strong(
         _utils_fluxdown_cli.fluxdown_server_task_safe_to_overwrite,
         cli_path,
         url,
         destination,
+        propagate_cancel=True,
     )
 
 
