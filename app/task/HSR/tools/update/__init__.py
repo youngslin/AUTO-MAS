@@ -113,7 +113,6 @@ async def check_engine_update(
     )
 
 
-
 def _cache_package_path(
     download_dir: Path,
     spec: EngineSpec,
@@ -131,10 +130,7 @@ def _cache_package_path(
         (candidate.source, candidate.download_url, downloader, candidate.asset_kind)
     )
     stamp = hashlib.sha256(identity.encode("utf-8")).hexdigest()[:20]
-    name = (
-        f"{spec.mirrorchyan_rid}-{version}-{downloader}-{stamp}"
-        f"{_suffix(candidate)}"
-    )
+    name = f"{spec.mirrorchyan_rid}-{version}-{downloader}-{stamp}{_suffix(candidate)}"
     return download_dir / name
 
 

@@ -233,7 +233,14 @@ async def test_reused_pipeline_installs_package_and_preserves_user_files(
 
 
 @pytest.mark.parametrize(
-    "unsafe_path", ["../outside.txt", "/tmp/outside.txt", "C:/outside.txt", "sub/../outside.txt", "sub\\outside.txt"]
+    "unsafe_path",
+    [
+        "../outside.txt",
+        "/tmp/outside.txt",
+        "C:/outside.txt",
+        "sub/../outside.txt",
+        "sub\\outside.txt",
+    ],
 )
 def test_unsafe_rollback_journal_never_changes_other_files(tmp_path, unsafe_path):
     import json

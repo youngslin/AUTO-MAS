@@ -132,9 +132,7 @@ def test_cache_identity_isolates_sources_and_downloaders(tmp_path, monkeypatch):
     from app.task.HSR.tools.update.engines import M7A
 
     def candidate(source, url, version="v2.0"):
-        return UpdateCandidate(
-            "M7A", "v1.0", version, source, "zip", url
-        )
+        return UpdateCandidate("M7A", "v1.0", version, source, "zip", url)
 
     first = candidate("GitHub", "https://github.example/v2.0/a.zip")
     alternate_url = candidate("GitHub", "https://github.example/v2.0/b.zip")
@@ -150,11 +148,15 @@ def test_cache_identity_isolates_sources_and_downloaders(tmp_path, monkeypatch):
     assert builtin.parent == tmp_path
 
     dangerous = candidate("GitHub", "https://github.example/a.zip", "../../escape")
-    assert updater._cache_package_path(tmp_path, M7A, dangerous, None).parent == tmp_path
+    assert (
+        updater._cache_package_path(tmp_path, M7A, dangerous, None).parent == tmp_path
+    )
 
 
 @pytest.mark.asyncio
-async def test_fluxdown_resumable_errors_keep_partial_and_exception(tmp_path, monkeypatch):
+async def test_fluxdown_resumable_errors_keep_partial_and_exception(
+    tmp_path, monkeypatch
+):
     from app.services.update_fluxdown import FluxdownResumableError
 
     target = tmp_path / "release.zip"

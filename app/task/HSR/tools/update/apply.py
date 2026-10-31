@@ -186,7 +186,8 @@ def rollback(install_root: Path) -> bool:
     seen: set[str] = set()
     for entry in entries:
         if not isinstance(entry, dict) or entry.get("action") not in (
-            "create", "replace"
+            "create",
+            "replace",
         ):
             return False
         rel = entry.get("rel")
@@ -194,7 +195,9 @@ def rollback(install_root: Path) -> bool:
             return False
         parts = rel.split("/")
         if (
-            any(part in ("", ".", "..") or ":" in part or "\\" in part for part in parts)
+            any(
+                part in ("", ".", "..") or ":" in part or "\\" in part for part in parts
+            )
             or rel.startswith("/")
             or rel.casefold() in seen
         ):
@@ -208,7 +211,9 @@ def rollback(install_root: Path) -> bool:
                 if cursor.is_symlink():
                     logger.warning("HSR 更新：恢复记录路径经过符号链接，已保留现场")
                     return False
-        checked.append((install_root.joinpath(*parts), backup.joinpath(*parts), entry["action"]))
+        checked.append(
+            (install_root.joinpath(*parts), backup.joinpath(*parts), entry["action"])
+        )
 
     failures: list[str] = []
     for target, saved, action in checked:
