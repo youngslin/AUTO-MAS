@@ -13,8 +13,20 @@ def test_chinese_output_preserves_text(system_encoding, output_encoding):
     code = (
         "import locale; "
         f"locale.getpreferredencoding = lambda: {system_encoding!r}; "
+        "from app.task.HSR.tools.m7a_runtime import M7ARunner; "
+        f"assert M7ARunner._decode_stream_output({text.encode(output_encoding)!r}) == {text!r}"
+    )
+    subprocess.run(
+        [sys.executable, "-c", code], check=True, capture_output=True, timeout=10
+    )
+
+
+def test_system_ansi_config_is_not_redecoded_as_gbk():
+    code = (
+        "import locale; "
+        "locale.getpreferredencoding = lambda: 'cp1252'; "
         "from app.utils.common.process_runner import decode_bytes; "
-        f"assert decode_bytes({text.encode(output_encoding)!r}) == {text!r}"
+        'assert decode_bytes(b\'{"name":"Caf\\xe9Tool"}\') == \'{"name":"CaféTool"}\''
     )
     subprocess.run(
         [sys.executable, "-c", code], check=True, capture_output=True, timeout=10
